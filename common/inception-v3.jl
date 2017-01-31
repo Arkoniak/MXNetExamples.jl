@@ -27,169 +27,175 @@ function Inception7A(data, num_1x1
   tower_5x5 = @mx.chain ConvFactory(data, num_5x5_red, name=name*"_tower", suffix="_conv") =>
               ConvFactory(num_5x5, kernel=(5, 5), pad=(2, 2), name=name*"_tower", suffix="_conv_1")
 
-  tower_3x3 = @mx.chain 
+  tower_3x3 = @mx.chain ConvFactory(data, num_3x3_red, name=name*"_tower_1", suffix="_conv") =>
+              ConvFactory(num_3x3_1, kernel=(3, 3), pad=(1, 1), name=name*"_tower_1", suffix="_conv_1") =>
+              ConvFactory(num_3x3_2, kernel=(3, 3), pad=(1, 1), name=name*"_tower_1", suffix="_conv_2")
+  
+  cproj = @mx.chain mx.Pooling(data, kernel=(3, 3), stride=(1, 1), pad=(1, 1), pool_type=pool, name=pool*"_pool_"*name*"_pool") =>
+          ConvFactory(proj, name=name*"_tower_2", suffix="_conv")
 
+  concat = mx.Concat(tower_1x1, tower_5x5, tower_3x3, cproj, name="ch_concat_"*name*"_chconcat")
+
+  return concat
 end
 
-import mxnet as mx
-
-def Conv(data, num_filter, kernel=(1, 1), stride=(1, 1), pad=(0, 0), name=None, suffix=''):
-    conv = mx.sym.Convolution(data=data, num_filter=num_filter, kernel=kernel, stride=stride, pad=pad, no_bias=True, name='%s%s_conv2d' %(name, suffix))
-    bn = mx.sym.BatchNorm(data=conv, name='%s%s_batchnorm' %(name, suffix), fix_gamma=True)
-    act = mx.sym.Activation(data=bn, act_type='relu', name='%s%s_relu' %(name, suffix))
-    return act
-
-
-def Inception7A(data,
-                num_1x1,
-                num_3x3_red, num_3x3_1, num_3x3_2,
-                num_5x5_red, num_5x5,
-                pool, proj,
-                name):
-    tower_1x1 = Conv(data, num_1x1, name=('%s_conv' % name))
-    tower_5x5 = Conv(data, num_5x5_red, name=('%s_tower' % name), suffix='_conv')
-    tower_5x5 = Conv(tower_5x5, num_5x5, kernel=(5, 5), pad=(2, 2), name=('%s_tower' % name), suffix='_conv_1')
-    tower_3x3 = Conv(data, num_3x3_red, name=('%s_tower_1' % name), suffix='_conv')
-    tower_3x3 = Conv(tower_3x3, num_3x3_1, kernel=(3, 3), pad=(1, 1), name=('%s_tower_1' % name), suffix='_conv_1')
-    tower_3x3 = Conv(tower_3x3, num_3x3_2, kernel=(3, 3), pad=(1, 1), name=('%s_tower_1' % name), suffix='_conv_2')
-    pooling = mx.sym.Pooling(data=data, kernel=(3, 3), stride=(1, 1), pad=(1, 1), pool_type=pool, name=('%s_pool_%s_pool' % (pool, name)))
-    cproj = Conv(pooling, proj, name=('%s_tower_2' %  name), suffix='_conv')
-    concat = mx.sym.Concat(*[tower_1x1, tower_5x5, tower_3x3, cproj], name='ch_concat_%s_chconcat' % name)
-    return concat
-
 # First Downsample
-def Inception7B(data,
+function Inception7B(data,
                 num_3x3,
                 num_d3x3_red, num_d3x3_1, num_d3x3_2,
                 pool,
-                name):
-    tower_3x3 = Conv(data, num_3x3, kernel=(3, 3), pad=(0, 0), stride=(2, 2), name=('%s_conv' % name))
-    tower_d3x3 = Conv(data, num_d3x3_red, name=('%s_tower' % name), suffix='_conv')
-    tower_d3x3 = Conv(tower_d3x3, num_d3x3_1, kernel=(3, 3), pad=(1, 1), stride=(1, 1), name=('%s_tower' % name), suffix='_conv_1')
-    tower_d3x3 = Conv(tower_d3x3, num_d3x3_2, kernel=(3, 3), pad=(0, 0), stride=(2, 2), name=('%s_tower' % name), suffix='_conv_2')
-    pooling = mx.symbol.Pooling(data=data, kernel=(3, 3), stride=(2, 2), pad=(0,0), pool_type="max", name=('max_pool_%s_pool' % name))
-    concat = mx.sym.Concat(*[tower_3x3, tower_d3x3, pooling], name='ch_concat_%s_chconcat' % name)
-    return concat
+                name)
+  tower_3x3 = ConvFactory(num_3x3, kernel=(3, 3), pad=(0, 0), stride=(2, 2), name=name*"_conv")
+  tower_d3x3 = @mx.chain ConvFactory(num_d3x3_red, name=name*"_tower", suffix="_conv") =>
+               ConvFactory(num_d3x3_1, kernel=(3, 3), pad=(1, 1), stride=(1, 1), name=name*"_tower", suffix="_conv_1") =>
+               ConvFactory(num_d3x3_2, kernel=(3, 3), pad=(0, 0), stride=(2, 2), name=name*"_tower", suffix="_conv_2")
 
-def Inception7C(data,
+  pooling = mx.Pooling(data, kernel=(3, 3), stride=(2, 2), pad=(0, 0), pool_type=:max, name="max_pool_"*name*"_pool")
+
+  concat = mx.Concat(tower_3x3, tower_d3x3, pooling, name="ch_concat_"*name*"_chconcat")
+
+  return concat
+end
+
+function Inception7C(data,
                 num_1x1,
                 num_d7_red, num_d7_1, num_d7_2,
                 num_q7_red, num_q7_1, num_q7_2, num_q7_3, num_q7_4,
                 pool, proj,
-                name):
-    tower_1x1 = Conv(data=data, num_filter=num_1x1, kernel=(1, 1), name=('%s_conv' % name))
-    tower_d7 = Conv(data=data, num_filter=num_d7_red, name=('%s_tower' % name), suffix='_conv')
-    tower_d7 = Conv(data=tower_d7, num_filter=num_d7_1, kernel=(1, 7), pad=(0, 3), name=('%s_tower' % name), suffix='_conv_1')
-    tower_d7 = Conv(data=tower_d7, num_filter=num_d7_2, kernel=(7, 1), pad=(3, 0), name=('%s_tower' % name), suffix='_conv_2')
-    tower_q7 = Conv(data=data, num_filter=num_q7_red, name=('%s_tower_1' % name), suffix='_conv')
-    tower_q7 = Conv(data=tower_q7, num_filter=num_q7_1, kernel=(7, 1), pad=(3, 0), name=('%s_tower_1' % name), suffix='_conv_1')
-    tower_q7 = Conv(data=tower_q7, num_filter=num_q7_2, kernel=(1, 7), pad=(0, 3), name=('%s_tower_1' % name), suffix='_conv_2')
-    tower_q7 = Conv(data=tower_q7, num_filter=num_q7_3, kernel=(7, 1), pad=(3, 0), name=('%s_tower_1' % name), suffix='_conv_3')
-    tower_q7 = Conv(data=tower_q7, num_filter=num_q7_4, kernel=(1, 7), pad=(0, 3), name=('%s_tower_1' % name), suffix='_conv_4')
-    pooling = mx.sym.Pooling(data=data, kernel=(3, 3), stride=(1, 1), pad=(1, 1), pool_type=pool, name=('%s_pool_%s_pool' % (pool, name)))
-    cproj = Conv(data=pooling, num_filter=proj, kernel=(1, 1), name=('%s_tower_2' %  name), suffix='_conv')
-    # concat
-    concat = mx.sym.Concat(*[tower_1x1, tower_d7, tower_q7, cproj], name='ch_concat_%s_chconcat' % name)
-    return concat
+                name)
+  tower_1x1 = ConvFactory(data, num_1x1, kernel=(1, 1), name=name*"_conv")
 
-def Inception7D(data,
+  tower_d7 = @mx.chain ConvFactory(data, num_d7_red, name=name*"_tower", suffix="_conv") =>
+             ConvFactory(num_d7_1, kernel=(1, 7), pad=(0, 3), name=name*"_tower", suffix="_conv_1") =>
+             ConvFactory(num_d7_2, kernel=(7, 1), pad=(3, 0), name=name*"_tower", suffix="_conv_2")
+
+  tower_q7 = @mx.chain ConvFactory(data, num_q7_red, name=name*"tower_1", suffix="_conv") =>
+             ConvFactory(num_q7_1, kernel=(7, 1), pad=(3, 0), name=name*"tower_1", suffix="_conv_1") =>
+             ConvFactory(num_q7_2, kernel=(1, 7), pad=(0, 3), name=name*"tower_1", suffix="_conv_2") =>
+             ConvFactory(num_q7_3, kernel=(7, 1), pad=(3, 0), name=name*"tower_1", suffix="_conv_3") =>
+             ConvFactory(num_q7_4, kernel=(1, 7), pad=(0, 3), name=name*"tower_1", suffix="_conv_4")
+
+  cproj = @mx.chain mx.Pooling(data, kernel=(3, 3), stride=(1, 1), pad=(1, 1), pool_type=pool, name=pool*"_pool_"*name*"_pool") =>
+          ConvFactory(proj, kernel=(1, 1), name=name*"_tower_2", suffix="_conv")
+
+  concat = mx.Concat(tower_1x1, tower_d7, tower_q7, cproj, name="ch_concat_"*name*"_chconcat")
+
+  return concat
+end
+
+function Inception7D(data,
                 num_3x3_red, num_3x3,
                 num_d7_3x3_red, num_d7_1, num_d7_2, num_d7_3x3,
                 pool,
-                name):
-    tower_3x3 = Conv(data=data, num_filter=num_3x3_red, name=('%s_tower' % name), suffix='_conv')
-    tower_3x3 = Conv(data=tower_3x3, num_filter=num_3x3, kernel=(3, 3), pad=(0,0), stride=(2, 2), name=('%s_tower' % name), suffix='_conv_1')
-    tower_d7_3x3 = Conv(data=data, num_filter=num_d7_3x3_red, name=('%s_tower_1' % name), suffix='_conv')
-    tower_d7_3x3 = Conv(data=tower_d7_3x3, num_filter=num_d7_1, kernel=(1, 7), pad=(0, 3), name=('%s_tower_1' % name), suffix='_conv_1')
-    tower_d7_3x3 = Conv(data=tower_d7_3x3, num_filter=num_d7_2, kernel=(7, 1), pad=(3, 0), name=('%s_tower_1' % name), suffix='_conv_2')
-    tower_d7_3x3 = Conv(data=tower_d7_3x3, num_filter=num_d7_3x3, kernel=(3, 3), stride=(2, 2), name=('%s_tower_1' % name), suffix='_conv_3')
-    pooling = mx.sym.Pooling(data=data, kernel=(3, 3), stride=(2, 2), pool_type=pool, name=('%s_pool_%s_pool' % (pool, name)))
-    # concat
-    concat = mx.sym.Concat(*[tower_3x3, tower_d7_3x3, pooling], name='ch_concat_%s_chconcat' % name)
-    return concat
+                name)
+  tower_3x3 = @mx.chain ConvFactory(data, num_3x3_red, name=name*"_tower", suffix="_conv") =>
+              ConvFactory(num_3x3, kernel=(3, 3), pad=(0, 0), stride=(2, 2), name=name*"_tower", suffix="_conv_1")
 
-def Inception7E(data,
+  tower_d7_3x3 = @mx.chain ConvFactory(data, num_d7_3x3_red, name=name*"_tower_1", suffix="_conv") =>
+                 ConvFactory(num_d7_1, kernel=(1, 7), pad=(0, 3), name=name*"_tower_1", suffix="_conv_1") =>
+                 ConvFactory(num_d7_2, kernel=(7, 1), pad=(3, 0), name=name*"_tower_1", suffix="_conv_2") =>
+                 ConvFactory(num_d7_3x3, kernel=(3, 3), stride=(2, 2), name=name*"_tower_1", suffix="_conv_3")
+
+  pooling = mx.Pooling(data, kernel=(3, 3), stride=(2, 2), pool_type=pool, name=pool*"_pool_"*name*"_pool")
+
+  concat = mx.Concat(tower_3x3, tower_d7_3x3, pooling, name="ch_concat_"*name*"_chconcat")
+
+  return concat
+end
+
+function Inception7E(data,
                 num_1x1,
                 num_d3_red, num_d3_1, num_d3_2,
                 num_3x3_d3_red, num_3x3, num_3x3_d3_1, num_3x3_d3_2,
                 pool, proj,
-                name):
-    tower_1x1 = Conv(data=data, num_filter=num_1x1, kernel=(1, 1), name=('%s_conv' % name))
-    tower_d3 = Conv(data=data, num_filter=num_d3_red, name=('%s_tower' % name), suffix='_conv')
-    tower_d3_a = Conv(data=tower_d3, num_filter=num_d3_1, kernel=(1, 3), pad=(0, 1), name=('%s_tower' % name), suffix='_mixed_conv')
-    tower_d3_b = Conv(data=tower_d3, num_filter=num_d3_2, kernel=(3, 1), pad=(1, 0), name=('%s_tower' % name), suffix='_mixed_conv_1')
-    tower_3x3_d3 = Conv(data=data, num_filter=num_3x3_d3_red, name=('%s_tower_1' % name), suffix='_conv')
-    tower_3x3_d3 = Conv(data=tower_3x3_d3, num_filter=num_3x3, kernel=(3, 3), pad=(1, 1), name=('%s_tower_1' % name), suffix='_conv_1')
-    tower_3x3_d3_a = Conv(data=tower_3x3_d3, num_filter=num_3x3_d3_1, kernel=(1, 3), pad=(0, 1), name=('%s_tower_1' % name), suffix='_mixed_conv')
-    tower_3x3_d3_b = Conv(data=tower_3x3_d3, num_filter=num_3x3_d3_2, kernel=(3, 1), pad=(1, 0), name=('%s_tower_1' % name), suffix='_mixed_conv_1')
-    pooling = mx.sym.Pooling(data=data, kernel=(3, 3), stride=(1, 1), pad=(1, 1), pool_type=pool, name=('%s_pool_%s_pool' % (pool, name)))
-    cproj = Conv(data=pooling, num_filter=proj, kernel=(1, 1), name=('%s_tower_2' %  name), suffix='_conv')
-    # concat
-    concat = mx.sym.Concat(*[tower_1x1, tower_d3_a, tower_d3_b, tower_3x3_d3_a, tower_3x3_d3_b, cproj], name='ch_concat_%s_chconcat' % name)
-    return concat
+                name)
+  tower_1x1 = ConvFactory(data, num_1x1, kernel=(1, 1), name=name*"_conv")
+  tower_d3 = ConvFactory(data, num_d3_red, name=name*"_tower", suffix="_conv")
+  tower_d3_a = ConvFactory(tower_d3, num_d3_1, kernel=(1, 3), pad=(0, 1), name=name*"_tower", suffix="_mixed_conv")
+  tower_d3_b = ConvFactory(tower_d3, num_d3_2, kernel=(3, 1), pad=(1, 0), name=name*"_tower", suffix="_mixed_conv_1")
 
-def get_symbol(num_classes=1000, **kwargs):
-    data = mx.symbol.Variable(name="data")
-    # stage 1
-    conv = Conv(data, 32, kernel=(3, 3), stride=(2, 2), name="conv")
-    conv_1 = Conv(conv, 32, kernel=(3, 3), name="conv_1")
-    conv_2 = Conv(conv_1, 64, kernel=(3, 3), pad=(1, 1), name="conv_2")
-    pool = mx.sym.Pooling(data=conv_2, kernel=(3, 3), stride=(2, 2), pool_type="max", name="pool")
-    # stage 2
-    conv_3 = Conv(pool, 80, kernel=(1, 1), name="conv_3")
-    conv_4 = Conv(conv_3, 192, kernel=(3, 3), name="conv_4")
-    pool1 = mx.sym.Pooling(data=conv_4, kernel=(3, 3), stride=(2, 2), pool_type="max", name="pool1")
-    # stage 3
-    in3a = Inception7A(pool1, 64,
-                       64, 96, 96,
-                       48, 64,
-                       "avg", 32, "mixed")
-    in3b = Inception7A(in3a, 64,
-                       64, 96, 96,
-                       48, 64,
-                       "avg", 64, "mixed_1")
-    in3c = Inception7A(in3b, 64,
-                       64, 96, 96,
-                       48, 64,
-                       "avg", 64, "mixed_2")
-    in3d = Inception7B(in3c, 384,
-                       64, 96, 96,
-                       "max", "mixed_3")
-    # stage 4
-    in4a = Inception7C(in3d, 192,
-                       128, 128, 192,
-                       128, 128, 128, 128, 192,
-                       "avg", 192, "mixed_4")
-    in4b = Inception7C(in4a, 192,
-                       160, 160, 192,
-                       160, 160, 160, 160, 192,
-                       "avg", 192, "mixed_5")
-    in4c = Inception7C(in4b, 192,
-                       160, 160, 192,
-                       160, 160, 160, 160, 192,
-                       "avg", 192, "mixed_6")
-    in4d = Inception7C(in4c, 192,
-                       192, 192, 192,
-                       192, 192, 192, 192, 192,
-                       "avg", 192, "mixed_7")
-    in4e = Inception7D(in4d, 192, 320,
-                       192, 192, 192, 192,
-                       "max", "mixed_8")
-    # stage 5
-    in5a = Inception7E(in4e, 320,
-                       384, 384, 384,
-                       448, 384, 384, 384,
-                       "avg", 192, "mixed_9")
-    in5b = Inception7E(in5a, 320,
-                       384, 384, 384,
-                       448, 384, 384, 384,
-                       "max", 192, "mixed_10")
-    # pool
-    pool = mx.sym.Pooling(data=in5b, kernel=(8, 8), stride=(1, 1), pool_type="avg", name="global_pool")
-    flatten = mx.sym.Flatten(data=pool, name="flatten")
-    fc1 = mx.symbol.FullyConnected(data=flatten, num_hidden=num_classes, name='fc1')
-    softmax = mx.symbol.SoftmaxOutput(data=fc1, name='softmax')
-    return softmax
+  tower_3x3_d3 = @mx.chain ConvFactory(data, num_3x3_d3_red, name=name*"_tower_1", suffix="_conv") =>
+                 ConvFactory(num_3x3, kernel=(3, 3), pad=(1, 1), name=name*"_tower_1", suffix="_conv_1")
 
+  tower_3x3_d3a = ConvFactory(tower_3x3_d3, num_3x3_d3_1, kernel=(1, 3), pad=(0, 1), name=name*"_tower_1", suffix="_mixed_conv")
+  tower_3x3_d3b = ConvFactory(tower_3x3_d3, num_3x3_d3_2, kernel=(3, 1), pad=(1, 0), name=name*"_tower_1", suffix="_mixed_conv_1")
+
+  cproj = @mx.chain mx.Pooling(data, kernel=(3, 3), stride=(1, 1), pad=(1, 1), pool_type=pool, name=pool*"_pool_"*name*"_pool") =>
+          ConvFactory(proj, kernel=(1, 1), name=name*"_tower_2", suffix="conv")
+
+  concat = mx.Concat(tower_1x1, tower_d3_a, tower_d3_b, tower_3x3_d3_a, tower_3x3_d3_b, cproj, name="ch_concat_"*name*"_chconcat")
+
+  return concat
+end
+
+function get_symbol(num_classes=1000)
+  arch = @mx.chain mx.Variable(:data) =>
+
+         # stage 1
+         ConvFactory(32, kernel=(3, 3), stride=(2, 2), name="conv") =>
+         ConvFactory(32, kernel=(3, 3), name="conv_1") =>
+         ConvFactory(64, kernel=(3, 3), pad=(1, 1), name="conv_2") =>
+         mx.Pooling(kernel=(3, 3), stride=(2, 2), pool_type=:max, name=:pool) =>
+
+         # stage 2
+         ConvFactory(80, kernel=(1, 1), name="conv_3") =>
+         ConvFactory(192, kernel=(3, 3), name="conv_4") => 
+         mx.Pooling(kernel=(3, 3), stride=(2, 2), pool_type=:max, name=:pool1) =>
+
+         # stage 3
+         Inception7A(64,
+                     64, 96, 96,
+                     48, 64,
+                     :avg, 32, "mixed") =>
+         Inception7A(64,
+                     64, 96, 96,
+                     48, 64,
+                     :avg, 64, "mixed_1") =>
+         Inception7A(64,
+                     64, 96, 96,
+                     48, 64,
+                     :avg, 64, "mixed_2") =>
+         Inception7B(384,
+                     64, 96, 96,
+                     :max, "mixed_3") =>
+
+         # stage 4
+         Inception7C(192,
+                     128, 128, 192,
+                     128, 128, 128, 128, 192,
+                     :avg, 192, "mixed_4") =>
+         Inception7C(192,
+                     160, 160, 192,
+                     160, 160, 160, 160, 192,
+                     :avg, 192, "mixed_5") =>
+         Inception7C(192,
+                     160, 160, 192,
+                     160, 160, 160, 160, 192,
+                     :avg, 192, "mixed_6") =>
+         Inception7C(192,
+                     192, 192, 192,
+                     192, 192, 192, 192, 192,
+                     :avg, 192, "mixed_7") =>
+         Inception7D(192, 320,
+                     192, 192, 192, 192,
+                     :max, "mixed_8") =>
+
+         # stage 5
+         Inception7E(320,
+                     384, 384, 384,
+                     448, 384, 384, 384,
+                     :avg, 192, "mixed_9") =>
+         Inception7E(320,
+                     384, 384, 384,
+                     448, 384, 384, 384,
+                     :max, 192, "mixed_10") =>
+
+         # pool
+         mx.Pooling(kernel=(8, 8), stride=(1, 1), pool_type=:avg, name=:global_pool) =>
+         mx.Flatten(name=:flatten) =>
+         mx.FullyConnected(num_hidden=num_classes, name=:fc1) =>
+         mx.SoftmaxOutput(name=:softmax)
+   return arch
+end
 
 end
